@@ -1,0 +1,11 @@
+->libcrypto.so gcc commands
+DEBUG: gcc -O0 -g -std=gnu17 -Wall -shared -fpic libmycrypto.c -o libmycrypto.so -lcrypto
+RELEASE: gcc -O2 -s -std=gnu17 -Wno-deprecated-declarations -shared -fpic libmycrypto.c -o libmycrypto.so -lcrypto
+
+->server gcc commands
+DEBUG: gcc -O0 -g -std=gnu17 -Wall server.c -o server -I../libmycrypto -L../libmycrypto -Wl,-rpath=../libmycrypto -lmycrypto
+RELEASE: gcc -O2 -s -std=gnu17 server.c -o server -I../libmycrypto -L../libmycrypto -Wl,-rpath=../libmycrypto -lmycrypto
+
+->client gcc commands
+DEBUG: gcc -O0 -g -std=gnu17 -Wall client.c -o client -I../libmycrypto -L../libmycrypto -Wl,-rpath=../libmycrypto -lmycrypto
+RELEASE: gcc -O2 -s -std=gnu17 client.c -o client -I../libmycrypto -L../libmycrypto -Wl,-rpath=../libmycrypto -lmycrypto
