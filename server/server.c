@@ -78,7 +78,7 @@ void strip_newline(char *s){
 }
 
 /* Receives messages from client */
-void *recv_msg_from_client(void *arg){
+void *recv_msg_from_client(void *arg) {
     unsigned char buffer_recv[BUFFER_SIZE] = {};
     int rlen = 0;
     client_t *cli = (client_t *)arg;
@@ -108,8 +108,6 @@ void *recv_msg_from_client(void *arg){
     shutdown(cli->connfd, SHUT_RDWR);
     close(cli->connfd);
     cli_count--;
-
-    pthread_detach(pthread_self());
 
     return NULL;
 }
@@ -169,8 +167,6 @@ void *send_msg_to_client(void *arg) {
     }
 
     free(cli);
-
-    pthread_detach(pthread_self());
 
     return NULL;
 }
@@ -336,7 +332,7 @@ int main(int argc, char *argv[]) {
 
             send_fixed_len_uchar(vko_ukm_to_send, cli->connfd, sizeof(vko_ukm_to_send));
 
-            char *pub_key_to_send = calloc(GOST_MIN_KEY_LEN, sizeof(char));
+            char *pub_key_to_send = NULL;
             gost_get_pub_key(&pub_key_to_send);
 
             send_fixed_len_uchar(pub_key_to_send, cli->connfd, GOST_MIN_KEY_LEN);
@@ -355,13 +351,21 @@ int main(int argc, char *argv[]) {
             gost_get_encrypted_priv_key(&encoded_priv_key);
 
             send_fixed_len_uchar(encoded_priv_key, cli->connfd, GOST_MIN_KEY_LEN_BYTE);
+
+            free(pub_key_to_send);
         }
 
         pthread_create(&send_th, NULL, &send_msg_to_client, (void*)cli);
         pthread_create(&recv_th, NULL, &recv_msg_from_client, (void*)cli);
+        pthread_detach(send_th);
+        pthread_detach(recv_th);
 
         /* Reduce CPU usage */
         sleep(1);
+    }
+
+    if(is_gost) {
+        gost_deinit();
     }
 
     return EXIT_SUCCESS;

@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
             gost_set_peer_key(peer_key);
         }
 
-        char *pub_key_to_send = calloc(GOST_MIN_KEY_LEN, sizeof(char));
+        char *pub_key_to_send = NULL;
         gost_get_pub_key(&pub_key_to_send);
 
         send_fixed_len_uchar(pub_key_to_send, sockfd, GOST_MIN_KEY_LEN);
@@ -297,12 +297,18 @@ int main(int argc, char *argv[]) {
         if((rlen = read(sockfd, encrypted_key, GOST_MIN_KEY_LEN_BYTE)) > 0) {
             gost_decrypt_and_set_priv_key(encrypted_key);
         }
+
+        free(pub_key_to_send);
     }   
 
     pthread_create(&send_th, NULL, &send_msg_to_server, (void*)(&sockfd));
     pthread_create(&recv_th, NULL, &recv_msg_from_server, (void*)(&sockfd));
     pthread_join(recv_th, NULL);
     pthread_join(send_th, NULL);
+
+    if(is_gost) {
+        gost_deinit();
+    }
 
     return EXIT_SUCCESS;
 }

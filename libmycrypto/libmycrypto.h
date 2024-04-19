@@ -39,6 +39,7 @@ int dh_get_public_key(unsigned char *key);
 int dh_derive_shared_key(unsigned char *key);
 
 int gost_init();
+void gost_deinit();
 void gost_generate_vko_ukm();
 int gost_get_vko_ukm(unsigned char *buf);
 int gost_set_vko_ukm(unsigned char *buf);

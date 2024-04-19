@@ -365,6 +365,12 @@ int gost_init() {
     return 0;
 }
 
+void gost_deinit() {
+    ENGINE_finish(gost_ctx.gost_engine);
+    ENGINE_free(gost_ctx.gost_engine);
+    OPENSSL_cleanup();
+}
+
 void gost_generate_vko_ukm() {
     RAND_bytes(gost_ctx.vko_ukm, sizeof(gost_ctx.vko_ukm));
 }
@@ -382,12 +388,21 @@ int gost_set_vko_ukm(unsigned char *buf) {
 }
 
 int gost_get_pub_key(char **key) {
-    BIO* bio = BIO_new(BIO_s_mem());
+    BUF_MEM *bptr;
+    BIO *bio = BIO_new(BIO_s_mem());
     PEM_write_bio_PUBKEY(bio, gost_ctx.key_pair);
     int pubKeyDataLength = BIO_get_mem_data(bio, key);
 
-    // BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
-    // EVP_PKEY_print_private(fp, gost_ctx.key_pair, 0, NULL);
+#ifdef DEBUG_MODE 
+    BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
+    EVP_PKEY_print_private(fp, gost_ctx.key_pair, 0, NULL);
+#endif
+
+    BIO_get_mem_ptr(bio, &bptr);
+    BIO_set_close(bio, BIO_NOCLOSE);
+    BIO_free(bio);
+    bptr->data = NULL;
+    BUF_MEM_free(bptr); 
 
     return 0;
 }
@@ -396,8 +411,12 @@ int gost_set_peer_key(const char *key) {
     BIO *bio = BIO_new_mem_buf(key, strlen(key));
     PEM_read_bio_PUBKEY(bio, &gost_ctx.peer_key, NULL, NULL);
 
-    // BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
-    // EVP_PKEY_print_public(fp, gost_ctx.peer_key, 0, NULL);
+#ifdef DEBUG_MODE 
+    BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
+    EVP_PKEY_print_public(fp, gost_ctx.peer_key, 0, NULL);
+#endif
+
+    BIO_free(bio);
 
     return 0;
 }
@@ -421,6 +440,8 @@ int gost_derive_vko_key() {
     if (EVP_PKEY_derive(vko_derivation_ctx, gost_ctx.vko_session_key, &len) <= 0) {
         return -4;
     }
+
+    EVP_PKEY_CTX_free(vko_derivation_ctx);
 
     return 0;
 }
@@ -453,13 +474,15 @@ int gost_generate_priv_key() {
         return -3;
     }
 
-    // BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
-    // EVP_PKEY_print_private(fp, priv_key, 0, NULL);
+#ifdef DEBUG_MODE
+    BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
+    EVP_PKEY_print_private(fp, priv_key, 0, NULL);
+#endif
 
     BIO* bio = BIO_new(BIO_s_mem());
     PEM_write_bio_PrivateKey(bio, priv_key, 0, 0, 0, 0, 0);
     int priv_key_len = BIO_get_mem_data(bio, NULL);
-    char *buf = calloc(priv_key_len, sizeof(char));
+    char *buf;
     BIO_get_mem_data(bio, &buf);
     
     char *encoded_str = calloc(priv_key_len, sizeof(char));
@@ -478,8 +501,18 @@ int gost_generate_priv_key() {
         gost_ctx.private_key[i] = decoded_str[GOST_MIN_KEY_LEN_BYTE * 2 - i - 1];
     }
 
+    BUF_MEM *bptr;
+    BIO_get_mem_ptr(bio, &bptr);
+    BIO_set_close(bio, BIO_NOCLOSE);
+    BIO_free(bio);
+    bptr->data = NULL;
+    BUF_MEM_free(bptr);
+
     free(buf);
     free(encoded_str);
+    free(decoded_str);
+
+    EVP_PKEY_free(priv_key);
     EVP_PKEY_CTX_free(ctx);
     return 0;
 }
