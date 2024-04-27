@@ -13,16 +13,19 @@
 
 #define __GLIBC_USE
 
+// Private lib's structure contatining DH params
 typedef struct dh_params_private {
     BIGNUM *p_param;
     BIGNUM *g_param;
 } dh_params_private_t;
 
+// Private lib's structure conatining DH private and session keys
 typedef struct dh_keys_private {
     EVP_PKEY *key_pair;
     unsigned char *session_key;
 } dh_keys_private_t;
 
+// Private lib's structure containing GOST engine and needed keys
 typedef struct gost_context {
     ENGINE *gost_engine;
     EVP_PKEY *key_pair;
@@ -39,6 +42,7 @@ static gost_context_t gost_ctx = {};
 
 static int dh_create_domain_param_key(EVP_PKEY **domainParamKey);
 
+// Sets seed_raw_key with DH derived key
 static void seed_set_dh_session_key() {
     unsigned char seed_raw_key[SEED_KEY_LENGTH] = {};
 
@@ -49,7 +53,8 @@ static void seed_set_dh_session_key() {
     SEED_set_key(seed_raw_key, &seed_key);
 }
 
-static int calc_decod_len(const char* b64input) { //Calculates the length of a decoded base64 string
+//Calculates the length of a decoded base64 string
+static int calc_decod_len(const char* b64input) { 
     int len = strlen(b64input);
     int padding = 0;
 
@@ -61,7 +66,8 @@ static int calc_decod_len(const char* b64input) { //Calculates the length of a d
     return (int)len*0.75 - padding;
 }
 
-static int base64_decode(char* b64message, char** buffer) { //Decodes a base64 encoded string
+// Decodes a base64 encoded string
+static int base64_decode(char* b64message, char** buffer) { 
     BIO *bio, *b64;
     int decodeLen = calc_decod_len(b64message),
         len = 0;
@@ -82,6 +88,7 @@ static int base64_decode(char* b64message, char** buffer) { //Decodes a base64 e
     return (0); //success
 }
 
+// Reads private key for SEED encrypting from file
 int seed_shared_key_read(const char *key_path) {
     unsigned char seed_raw_key[SEED_KEY_LENGTH] = {};
 
@@ -100,6 +107,8 @@ int seed_shared_key_read(const char *key_path) {
     return 0;
 }
 
+// Encrypts passed message by SEED algo (block by block with 128 bit size) a
+// and returns encrypted message
 const unsigned char *seed_encrypt_with_shared_key(const char *message) {
     unsigned char message_block[BUFFER_SIZE / SEED_BLOCK_SIZE + 1][SEED_BLOCK_SIZE] = {};
     unsigned char message_block_encrypt[SEED_BLOCK_SIZE] = {};
@@ -118,6 +127,7 @@ const unsigned char *seed_encrypt_with_shared_key(const char *message) {
     return message_full_encrypt;
 }
 
+// Decrypts passed message block (with size of 128 bit) and writes it to decr_msg
 bool seed_decrypt_with_shared_key(const unsigned char *msg_block, unsigned char *decr_msg) {
 
     unsigned char encrypt_msg[SEED_BLOCK_SIZE] = {};
@@ -144,6 +154,7 @@ bool seed_decrypt_with_shared_key(const unsigned char *msg_block, unsigned char 
     return false;
 }
 
+// Generates DH's prime and generator numbers and writes it to DH params structure
 int dh_generate_params(int p_len_bits, int g) {
     BIGNUM *big_add = BN_new();
     BIGNUM *big_rem = BN_new();
@@ -177,6 +188,7 @@ int dh_generate_params(int p_len_bits, int g) {
     return 0;
 }
 
+// Converts passed prime and generator numbers to BIGNUM format and writes it to DH params srtucture
 int dh_set_params(const unsigned char *prime, const unsigned char *generator) {
     dh_params_priv.p_param = BN_new();
     dh_params_priv.g_param = BN_new();
@@ -192,6 +204,7 @@ int dh_set_params(const unsigned char *prime, const unsigned char *generator) {
     return 0;
 }
 
+// Converts DH params frim BIGNUM fromat into string format and returns it
 int dh_get_params(dh_params_t *params) {
     BN_bn2bin(dh_params_priv.p_param, params->p_param);
     BN_bn2bin(dh_params_priv.g_param, params->g_param);
@@ -199,6 +212,7 @@ int dh_get_params(dh_params_t *params) {
     return 0;
 }
 
+// Generate DH private/public key-pair
 int dh_generate_keys() {
     EVP_PKEY *domain_param_key = NULL;
     if(dh_create_domain_param_key(&domain_param_key) < 0) {
@@ -218,6 +232,7 @@ int dh_generate_keys() {
     return 0;
 }
 
+// Reads DH public key from DH structure
 int dh_get_public_key(unsigned char *key) {
     BIGNUM* publicKey = NULL;
     if (!EVP_PKEY_get_bn_param(dh_keys.key_pair, OSSL_PKEY_PARAM_PUB_KEY, &publicKey)) {
@@ -229,6 +244,7 @@ int dh_get_public_key(unsigned char *key) {
     return 0;
 }
 
+// Creates DH domain param key needed for derivating session key
 static int dh_create_domain_param_key(EVP_PKEY **domainParamKey) {
     OSSL_PARAM_BLD *paramBuild = OSSL_PARAM_BLD_new();
 
@@ -259,6 +275,7 @@ static int dh_create_domain_param_key(EVP_PKEY **domainParamKey) {
     return 0;
 }
 
+// Derives DH session key
 int dh_derive_shared_key(unsigned char *key) {
     EVP_PKEY *peer_public_key = NULL;
     
@@ -317,6 +334,7 @@ int dh_derive_shared_key(unsigned char *key) {
     return 0;
 }
 
+// Loads GOST engine and generating private/public key-pair for derivating session key
 int gost_init() {
     ENGINE_load_builtin_engines();
     gost_ctx.gost_engine = ENGINE_by_id("gost");
@@ -365,12 +383,14 @@ int gost_init() {
     return 0;
 }
 
+// Unloads GOST engine
 void gost_deinit() {
     ENGINE_finish(gost_ctx.gost_engine);
     ENGINE_free(gost_ctx.gost_engine);
     OPENSSL_cleanup();
 }
 
+// Generates 64 bits of User Key Material needed for VKO session key derivation algo
 void gost_generate_vko_ukm() {
     RAND_bytes(gost_ctx.vko_ukm, sizeof(gost_ctx.vko_ukm));
 }
@@ -381,12 +401,14 @@ int gost_get_vko_ukm(unsigned char *buf) {
     return 0;
 }
 
+// Sets 64 bits of passed User Key Material
 int gost_set_vko_ukm(unsigned char *buf) {
     memcpy(gost_ctx.vko_ukm, buf, sizeof(gost_ctx.vko_ukm));
 
     return 0;
 }
 
+// Reads GOST public key into key buffer
 int gost_get_pub_key(char **key) {
     BUF_MEM *bptr;
     BIO *bio = BIO_new(BIO_s_mem());
@@ -402,11 +424,12 @@ int gost_get_pub_key(char **key) {
     BIO_set_close(bio, BIO_NOCLOSE);
     BIO_free(bio);
     bptr->data = NULL;
-    BUF_MEM_free(bptr); 
+    BUF_MEM_free(bptr);
 
     return 0;
 }
 
+// Sets peer public key for derivating session key
 int gost_set_peer_key(const char *key) {
     BIO *bio = BIO_new_mem_buf(key, strlen(key));
     PEM_read_bio_PUBKEY(bio, &gost_ctx.peer_key, NULL, NULL);
@@ -421,6 +444,7 @@ int gost_set_peer_key(const char *key) {
     return 0;
 }
 
+// Derives VKO session key for encrypting shared private key for symmetric encryption
 int gost_derive_vko_key() {
     EVP_PKEY_CTX *vko_derivation_ctx = EVP_PKEY_CTX_new(gost_ctx.key_pair, NULL);
 
@@ -446,6 +470,7 @@ int gost_derive_vko_key() {
     return 0;
 }
 
+// Generates 256 bit shared private key for symmetric encryption
 int gost_generate_priv_key() {
     EVP_PKEY *priv_key = EVP_PKEY_new();
     EVP_PKEY_CTX *ctx = NULL;
@@ -478,6 +503,9 @@ int gost_generate_priv_key() {
     BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
     EVP_PKEY_print_private(fp, priv_key, 0, NULL);
 #endif
+
+    // BIO* fp = BIO_new_fp(stdout, BIO_NOCLOSE);
+    // EVP_PKEY_print_private(fp, priv_key, 0, NULL);
 
     BIO* bio = BIO_new(BIO_s_mem());
     PEM_write_bio_PrivateKey(bio, priv_key, 0, 0, 0, 0, 0);
@@ -517,6 +545,7 @@ int gost_generate_priv_key() {
     return 0;
 }
 
+// Reads generated shared private key for symmetric encryption into buf
 int gost_get_encrypted_priv_key(unsigned char **buf) {
     *buf = calloc(GOST_MIN_KEY_LEN_BYTE, sizeof(unsigned char));
 
@@ -550,6 +579,7 @@ int gost_get_encrypted_priv_key(unsigned char **buf) {
     return 0;
 }
 
+// Decrypts passed private key using VKO session key and sets it to structure
 int gost_decrypt_and_set_priv_key(unsigned char *key) {
     EVP_CIPHER *ciph;
     ciph = (EVP_CIPHER *)EVP_get_cipherbyname(SN_kuznyechik_ecb);
@@ -583,6 +613,7 @@ int gost_decrypt_and_set_priv_key(unsigned char *key) {
     return 0;
 }
 
+// Encrypts passed message with shared private key and returns it
 int gost_kuznyechik_encrypt(const char *msg, unsigned char* enc_msg, int *enc_len) {
     EVP_CIPHER *ciph;
     ciph = (EVP_CIPHER *)EVP_get_cipherbyname(SN_kuznyechik_ecb);
@@ -617,6 +648,7 @@ int gost_kuznyechik_encrypt(const char *msg, unsigned char* enc_msg, int *enc_le
     return 0;
 }
 
+// Decrypts passed encrypted message with shared private key and returns it
 int gost_kuznyechik_decrypt(const unsigned char* enc_msg, unsigned char *dec_msg) {
     EVP_CIPHER *ciph;
     ciph = (EVP_CIPHER *)EVP_get_cipherbyname(SN_kuznyechik_ecb);

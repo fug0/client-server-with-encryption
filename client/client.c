@@ -13,7 +13,6 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <openssl/idea.h>
 
 #include <libmycrypto.h>
 
